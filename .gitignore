@@ -1,0 +1,13 @@
+# 1. API Key rahasia
+.tomtom_key
+
+# 2. File dataset besar (>100MB)
+data/*.zip
+data/*.gdb
+data/idn_admin_boundaries*
+
+# 3. Cache & temporary files
+output/tomtom_cache.json
+.ipynb_checkpoints/
+__pycache__/
+.DS_Store
