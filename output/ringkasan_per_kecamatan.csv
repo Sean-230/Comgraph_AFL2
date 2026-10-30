@@ -1,12 +1,12 @@
-Kecamatan,jumlah_kejadian,status,menit_lengang_0200,pos_lengang_0200,ok_lengang_0200,menit_puncak_pagi_0800,pos_puncak_pagi_0800,ok_puncak_pagi_0800,menit_puncak_sore_1700,pos_puncak_sore_1700,ok_puncak_sore_1700,lolos_lengang_gagal_puncak,pct_5mnt_lengang_0200,pct_5mnt_puncak_pagi_0800,pct_5mnt_puncak_sore_1700
-Sukolilo,44,terjangkau,3.1,Pos Sukolilo (Keputih),True,4.1,Pos Sukolilo (Keputih),True,3.9,Pos Sukolilo (Keputih),True,False,11.2,7.0,6.8
-Gubeng,31,terjangkau sebagian,11.8,Pos Kali Rungkut,False,16.7,UPTD II Tambak Rejo,False,18.8,UPTD II Tambak Rejo,False,False,1.0,0.0,0.0
-Tambaksari,30,terjangkau,6.3,UPTD II Tambak Rejo,False,8.0,UPTD II Tambak Rejo,False,9.2,UPTD II Tambak Rejo,False,False,13.9,3.9,2.2
-Mulyorejo,27,terjangkau sebagian,11.9,Pos Sukolilo (Keputih),False,15.0,Pos Sukolilo (Keputih),False,16.4,Pos Sukolilo (Keputih),False,False,1.0,0.2,0.1
-Kenjeran,23,terjangkau,11.9,UPTD II Tambak Rejo,False,13.7,UPTD II Tambak Rejo,False,14.8,Pos Bulak,False,False,2.8,1.6,1.5
-Rungkut,23,terjangkau sebagian,12.1,Pos Kali Rungkut,False,13.6,Pos Kali Rungkut,False,14.9,Pos Kali Rungkut,False,False,19.9,13.9,12.1
-Gunung Anyar,19,terjangkau sebagian,11.2,Pos Kali Rungkut,False,13.3,Pos Kali Rungkut,False,16.4,Pos Kali Rungkut,False,False,14.1,8.8,6.4
-Genteng,18,terjangkau,6.5,Mako Pasar Turi,False,7.3,Mako Pasar Turi,False,8.8,Mako Pasar Turi,False,False,21.0,5.6,0.7
-Tenggilis Mejoyo,18,terjangkau,5.6,Rayon/UPTD III (SIER),False,6.3,Rayon/UPTD III (SIER),False,9.4,Rayon/UPTD III (SIER),False,False,51.3,27.0,19.5
-Wonocolo,14,terjangkau,8.1,Rayon/UPTD III (SIER),False,11.2,Rayon/UPTD III (SIER),False,11.6,Rayon/UPTD III (SIER),False,False,5.0,1.7,0.0
-Bulak,10,terjangkau,10.8,Pos Bulak,False,11.1,Pos Bulak,False,11.9,Pos Bulak,False,False,17.9,16.3,14.5
+Kecamatan,jumlah_kejadian,status,menit_lengang_0200,pos_lengang_0200,ok_lengang_0200,menit_jam_0600,pos_jam_0600,ok_jam_0600,lolos_lengang_gagal_puncak
+Sukolilo,21,terjangkau,3.1,Pos Sukolilo (Keputih),True,3.3,Pos Sukolilo (Keputih),True,False
+Bulak,19,terjangkau,10.8,Pos Bulak,False,10.9,Pos Bulak,False,False
+Gunung Anyar,17,terjangkau sebagian,11.2,Pos Kali Rungkut,False,11.4,Pos Kali Rungkut,False,False
+Kenjeran,16,terjangkau,11.9,UPTD II Tambak Rejo,False,12.7,UPTD II Tambak Rejo,False,False
+Gubeng,15,terjangkau,3.2,Pos Menur,True,3.3,Pos Menur,True,False
+Tambaksari,13,terjangkau,6.3,UPTD II Tambak Rejo,False,6.5,UPTD II Tambak Rejo,False,False
+Mulyorejo,11,terjangkau sebagian,11.9,Pos Sukolilo (Keputih),False,12.4,Pos Sukolilo (Keputih),False,False
+Rungkut,11,terjangkau sebagian,12.1,Pos Kali Rungkut,False,12.4,Pos Kali Rungkut,False,False
+Genteng,10,terjangkau,6.5,Mako Pasar Turi,False,6.7,Mako Pasar Turi,False,False
+Wonocolo,10,terjangkau,8.1,Rayon/UPTD III (SIER),False,8.8,Rayon/UPTD III (SIER),False,False
+Tenggilis Mejoyo,4,terjangkau,5.6,Rayon/UPTD III (SIER),False,5.8,Rayon/UPTD III (SIER),False,False
