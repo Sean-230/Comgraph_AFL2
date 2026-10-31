@@ -1,0 +1,16 @@
+[project]
+name = "comgraph-afl2"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "branca>=0.8.2",
+    "folium>=0.20.0",
+    "geopandas>=1.2.0",
+    "ipykernel>=7.4.0",
+    "matplotlib>=3.11.2",
+    "pandas>=3.1.0",
+    "pip>=26.2.2",
+    "pyogrio>=0.13.0",
+    "requests>=2.34.2",
+    "shapely>=2.2.0",
+]

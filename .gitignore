@@ -11,3 +11,5 @@ output/tomtom_cache.json
 .ipynb_checkpoints/
 __pycache__/
 .DS_Store
+# 4. Virtual environment
+.venv/
