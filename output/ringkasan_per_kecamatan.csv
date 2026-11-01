@@ -1,12 +1,12 @@
-Kecamatan,jumlah_kejadian,status,menit_lengang_0200,pos_lengang_0200,ok_lengang_0200,menit_jam_1700,pos_jam_1700,ok_jam_1700,lolos_lengang_gagal_puncak
-Sukolilo,21,terjangkau,3.1,Pos Sukolilo (Keputih),True,3.9,Pos Sukolilo (Keputih),True,False
-Bulak,19,terjangkau,10.8,Pos Bulak,False,11.9,Pos Bulak,False,False
-Gunung Anyar,17,terjangkau sebagian,11.2,Pos Kali Rungkut,False,16.4,Pos Kali Rungkut,False,False
-Kenjeran,16,terjangkau,11.9,UPTD II Tambak Rejo,False,14.8,Pos Bulak,False,False
-Gubeng,15,terjangkau,3.2,Pos Menur,True,4.1,Pos Menur,True,False
-Tambaksari,13,terjangkau,6.1,UPTD II Tambak Rejo,False,9.2,UPTD II Tambak Rejo,False,False
-Mulyorejo,11,terjangkau sebagian,11.9,Pos Sukolilo (Keputih),False,16.4,Pos Sukolilo (Keputih),False,False
-Rungkut,11,terjangkau sebagian,12.1,Pos Kali Rungkut,False,14.9,Pos Kali Rungkut,False,False
-Genteng,10,terjangkau,6.5,Mako Pasar Turi,False,8.8,Mako Pasar Turi,False,False
-Wonocolo,10,terjangkau,8.1,Rayon/UPTD III (SIER),False,11.6,Rayon/UPTD III (SIER),False,False
-Tenggilis Mejoyo,4,terjangkau,5.6,Rayon/UPTD III (SIER),False,9.4,Rayon/UPTD III (SIER),False,False
+Kecamatan,jumlah_kejadian,status,menit_lengang_0200,pos_lengang_0200,ok_lengang_0200,menit_siang_1400,pos_siang_1400,ok_siang_1400,menit_puncak_sore_1700,pos_puncak_sore_1700,ok_puncak_sore_1700,tambah_menit_terburuk,keterangan_batas
+Sukolilo,21,terjangkau,3.1,Pos Sukolilo (Keputih),True,3.6,Pos Sukolilo (Keputih),True,3.9,Pos Sukolilo (Keputih),True,0.8,≤ 5 menit di semua jam
+Bulak,19,terjangkau,10.8,Pos Bulak,False,11.3,Pos Bulak,False,11.9,Pos Bulak,False,1.1,lewat batas sejak jalan lengang (jarak/posisi pos)
+Gunung Anyar,17,terjangkau sebagian,11.2,Pos Kali Rungkut,False,13.5,Pos Kali Rungkut,False,16.4,Pos Kali Rungkut,False,5.2,lewat batas sejak jalan lengang (jarak/posisi pos)
+Kenjeran,16,terjangkau,11.9,UPTD II Tambak Rejo,False,14.2,Pos Bulak,False,14.8,Pos Bulak,False,2.9,lewat batas sejak jalan lengang (jarak/posisi pos)
+Gubeng,15,terjangkau,3.2,Pos Menur,True,3.9,Pos Menur,True,4.1,Pos Menur,True,0.9,≤ 5 menit di semua jam
+Tambaksari,13,terjangkau,6.1,UPTD II Tambak Rejo,False,8.4,UPTD II Tambak Rejo,False,9.2,UPTD II Tambak Rejo,False,3.1,lewat batas sejak jalan lengang (jarak/posisi pos)
+Mulyorejo,11,terjangkau sebagian,11.9,Pos Sukolilo (Keputih),False,14.3,Pos Sukolilo (Keputih),False,16.4,Pos Sukolilo (Keputih),False,4.5,lewat batas sejak jalan lengang (jarak/posisi pos)
+Rungkut,11,terjangkau sebagian,12.1,Pos Kali Rungkut,False,13.8,Pos Kali Rungkut,False,14.9,Pos Kali Rungkut,False,2.8,lewat batas sejak jalan lengang (jarak/posisi pos)
+Genteng,10,terjangkau,6.5,Mako Pasar Turi,False,8.4,Mako Pasar Turi,False,8.8,Mako Pasar Turi,False,2.3,lewat batas sejak jalan lengang (jarak/posisi pos)
+Wonocolo,10,terjangkau,8.1,Rayon/UPTD III (SIER),False,10.7,Rayon/UPTD III (SIER),False,11.6,Rayon/UPTD III (SIER),False,3.5,lewat batas sejak jalan lengang (jarak/posisi pos)
+Tenggilis Mejoyo,4,terjangkau,5.6,Rayon/UPTD III (SIER),False,6.4,Rayon/UPTD III (SIER),False,9.4,Rayon/UPTD III (SIER),False,3.8,lewat batas sejak jalan lengang (jarak/posisi pos)
