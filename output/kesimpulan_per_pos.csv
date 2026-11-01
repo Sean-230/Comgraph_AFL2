@@ -1,0 +1,8 @@
+nama,jenis,radius_km,centroid_dalam_radius,kecamatan_dilayani,menit_terlama,standar_perjalanan
+Rayon/UPTD III (SIER),rayon,3.5,"Tenggilis Mejoyo, Wonocolo","Tenggilis Mejoyo, Wonocolo",11.6,Tidak memenuhi
+Pos Kali Rungkut,pembantu,2.5,Tenggilis Mejoyo,"Gunung Anyar, Rungkut",16.4,Tidak memenuhi
+Pos Sukolilo (Keputih),pembantu,2.5,Sukolilo,"Mulyorejo, Sukolilo",16.4,Sebagian
+Pos Bulak,pembantu,2.5,"Bulak, Kenjeran","Bulak, Kenjeran",14.8,Tidak memenuhi
+UPTD II Tambak Rejo,rayon,3.5,"Bulak, Genteng, Kenjeran, Tambaksari","Kenjeran, Tambaksari",13.1,Tidak memenuhi
+Mako Pasar Turi,rayon,3.5,Genteng,Genteng,8.8,Tidak memenuhi
+Pos Menur,pembantu,2.5,Gubeng,Gubeng,4.1,Memenuhi
