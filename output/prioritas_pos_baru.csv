@@ -1,10 +1,10 @@
-peringkat,Kecamatan,jumlah_kejadian,status,persen_dalam_buffer,menit_lengang_0700,menit_terburuk,tambah_menit_terburuk,keterangan_batas
-1,Bulak,16,terjangkau,81.2,11.0,11.9,0.9,lewat batas sejak jalan lengang (jarak/posisi pos)
-2,Kenjeran,15,terjangkau,80.0,13.1,14.8,1.7,lewat batas sejak jalan lengang (jarak/posisi pos)
-3,Gunung Anyar,14,terjangkau sebagian,7.7,12.2,16.4,4.2,lewat batas sejak jalan lengang (jarak/posisi pos)
-4,Tambaksari,11,terjangkau,100.0,7.1,9.2,2.1,lewat batas sejak jalan lengang (jarak/posisi pos)
-5,Genteng,8,terjangkau,100.0,7.0,8.8,1.8,lewat batas sejak jalan lengang (jarak/posisi pos)
-6,Rungkut,8,terjangkau sebagian,62.5,12.8,14.9,2.1,lewat batas sejak jalan lengang (jarak/posisi pos)
-7,Wonocolo,7,terjangkau,100.0,10.0,11.6,1.6,lewat batas sejak jalan lengang (jarak/posisi pos)
-8,Mulyorejo,6,terjangkau sebagian,33.3,13.8,16.4,2.6,lewat batas sejak jalan lengang (jarak/posisi pos)
-9,Tenggilis Mejoyo,4,terjangkau,100.0,6.0,9.4,3.4,lewat batas sejak jalan lengang (jarak/posisi pos)
+peringkat,Kecamatan,jumlah_kejadian,status,persen_dalam_buffer,menit_terbaik_2200,menit_terburuk_1700
+1,Bulak,16,terjangkau,81.2,10.8,11.9
+2,Kenjeran,15,terjangkau,80.0,11.9,14.8
+3,Gunung Anyar,14,terjangkau sebagian,7.7,11.2,16.4
+4,Tambaksari,11,terjangkau,100.0,6.3,9.2
+5,Genteng,8,terjangkau,100.0,6.5,8.8
+6,Rungkut,8,terjangkau sebagian,62.5,12.1,14.9
+7,Wonocolo,7,terjangkau,100.0,8.1,11.6
+8,Mulyorejo,6,terjangkau sebagian,33.3,11.9,16.4
+9,Tenggilis Mejoyo,4,terjangkau,100.0,5.6,9.4
