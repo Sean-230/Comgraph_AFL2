@@ -13,3 +13,6 @@ __pycache__/
 .DS_Store
 # 4. Virtual environment
 .venv/
+
+# 5. Cache tile peta OSM (aplikasi pygame)
+output/tiles/
