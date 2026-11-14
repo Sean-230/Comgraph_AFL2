@@ -2,10 +2,12 @@
 
 Pilih lokasi kebakaran (klik peta, atau ketik nama tempat / "lat, lon" lalu Enter). Aplikasi mencari pos Damkar
 yang paling dekat (garis lurus) dan paling cepat tiba (rute TomTom dengan lalu lintas), seperti bagian 6 notebook.
+Klik baris di daftar perbandingan untuk menampilkan atau menyembunyikan rute pos itu di peta.
 
 Kontrol: geser = drag, zoom = scroll atau tombol +/-, panah atas/bawah = ganti jam berangkat (atau klik kotak jam dan ketik HH:MM 24 jam, lalu Enter), Esc = hapus pencarian.
+Lalu lintas live (hanya untuk "Sekarang"): tombol kanan atas peta = lapisan kemacetan TomTom dan auto-perbarui rute tiap 2 menit.
 """
-import csv, json, math, os, re, threading
+import csv, io, json, math, os, re, threading
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -20,6 +22,7 @@ WIB = ZoneInfo("Asia/Jakarta")
 BATAS_TEMPUH_MENIT = 5                      # tahap perjalanan dari standar 15 menit (sama dengan notebook)
 N_KANDIDAT = 5                              # rute hanya dihitung untuk N pos terdekat (hemat kuota TomTom)
 PANEL_W = 400
+SEGARKAN_MS = 120_000                      # selang pembaruan lalu lintas live (lapisan peta dan auto-perbarui rute)
 UA = {"User-Agent": "gis-coursework-pygame"}
 PUSAT = (112.72, -7.28)                     # lon, lat tengah Surabaya
 
@@ -74,17 +77,37 @@ def berangkat(menit):
     return datetime.now(WIB).replace(hour=menit // 60, minute=menit % 60, second=0, microsecond=0).isoformat()
 
 
-def rute(pos, lon, lat, jam):
-    """Rute tercepat pos -> lokasi. jam=None: berangkat sekarang (lalu lintas langsung). -> (menit, km, [(lon, lat)])"""
-    params = {"key": KEY, "travelMode": "car", "traffic": "true", "routeType": "fastest"}
-    if jam is not None:
+def rute(pos, lon, lat, jam, bebas=False):
+    """Rute tercepat pos -> lokasi. jam=None: berangkat sekarang (lalu lintas langsung). bebas=True: jam 03:00 hari ini
+    (lalu lintas lengang) sebagai pembanding. -> (menit, km, [(lon, lat)], info); info = menit tanpa lalu lintas dan
+    waktu kumulatif tiap langkah [(indeks titik, detik)] untuk mewarnai rute menurut kemacetan."""
+    params = {"key": KEY, "travelMode": "car", "traffic": "true", "routeType": "fastest",
+              "computeTravelTimeFor": "all", "instructionsType": "coded"}
+    if bebas:
+        params["departAt"] = berangkat(3 * 60)
+    elif jam is not None:
         params["departAt"] = berangkat(jam)
     r = requests.get(f"https://api.tomtom.com/routing/1/calculateRoute/{pos['lat']},{pos['lon']}:{lat},{lon}/json",
                      params=params, timeout=30)
     r.raise_for_status()
     rt = r.json()["routes"][0]
     titik = [(t["longitude"], t["latitude"]) for leg in rt["legs"] for t in leg["points"]]
-    return rt["summary"]["travelTimeInSeconds"] / 60, rt["summary"]["lengthInMeters"] / 1000, titik
+    info = {"bebas": rt["summary"]["noTrafficTravelTimeInSeconds"] / 60,
+            "langkah": [(g["pointIndex"], g["travelTimeInSeconds"]) for g in rt["guidance"]["instructions"]]}
+    return rt["summary"]["travelTimeInSeconds"] / 60, rt["summary"]["lengthInMeters"] / 1000, titik, info
+
+
+def warna_macet(rasio):
+    """Perlambatan (waktu tempuh / waktu saat lengang) -> warna seperti Google Maps."""
+    return C["hijau"] if rasio <= 1.25 else C["jingga"] if rasio <= 1.6 else (245, 124, 0) if rasio <= 2.2 else C["merah"]
+
+
+def bagian_macet(langkah, bebas):
+    """Pecah rute per langkah dan beri rasio perlambatan; [(awal, akhir, rasio)] atau [] kalau jalur pembanding berbeda."""
+    if [i for i, _ in langkah] != [i for i, _ in bebas]:
+        return []
+    return [(a[0], b[0], (b[1] - a[1]) / (bb[1] - ba[1]) if bb[1] - ba[1] >= 5 else None)
+            for a, b, ba, bb in zip(langkah, langkah[1:], bebas, bebas[1:])]
 
 
 def cari_tempat(teks):
@@ -156,12 +179,17 @@ class App:
         self.hasil = []                     # hasil pencarian yang bisa diklik: [(lon, lat, label)]
         self.lokasi = None                  # (lon, lat, label, kecamatan)
         self.kandidat = []                  # pos terdekat + hasil rute
+        self.tampil = set()                 # nama pos (selain yang tercepat) yang rutenya ditampilkan
+        self.sembunyi = set()               # nama pos tercepat yang rutenya disembunyikan (tercepat tampil secara default)
         self.jam = None                     # None = sekarang; selain itu menit sejak 00:00 (0-1439)
         self.ketik_jam, self.fokus_jam, self.galat_jam = "", False, False   # kotak ketik jam HH:MM
         self.gen = 0                        # nomor pilihan; hasil thread lama diabaikan
         self.klik, self.kotak_cari, self._ov = [], None, None
         self.tekan, self.geser = None, 0
         self._kursor = None
+        self.lapisan, self.auto = False, False   # lalu lintas live: lapisan kemacetan di peta, auto-perbarui rute
+        self.lalin, self.lalin_diminta, self.galat_lalin = {}, set(), None   # tile kemacetan {(z,x,y): (gambar, waktu unduh)}
+        self.menyegarkan, self.terakhir, self.diperbarui = False, 0, None
 
     # --- tampilan <-> koordinat ---
     def skala(self):
@@ -196,17 +224,74 @@ class App:
         except Exception:
             self.tile_diminta.discard((z, x, y))   # coba lagi di frame berikutnya yang membutuhkannya
 
+    # --- lalu lintas live (TomTom Traffic Flow) ---
+    def tile_lalin(self, z, x, y, t):
+        k = (z, x, y)
+        v = self.lalin.get(k)
+        if (v is None or t - v[1] > SEGARKAN_MS) and k not in self.lalin_diminta:
+            self.lalin_diminta.add(k)
+            threading.Thread(target=self._unduh_lalin, args=k, daemon=True).start()
+        return v[0] if v else None
+
+    def _unduh_lalin(self, z, x, y):
+        k = (z, x, y)
+        try:
+            r = requests.get(f"https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png",
+                             params={"key": KEY}, timeout=20)
+            r.raise_for_status()
+            self.lalin[k] = (pygame.image.load(io.BytesIO(r.content)), pygame.time.get_ticks())
+            self.galat_lalin = None
+        except Exception as e:
+            self.galat_lalin = str(e)[:50]
+            self.lalin[k] = (self.lalin[k][0] if k in self.lalin else None, pygame.time.get_ticks())   # coba lagi setelah SEGARKAN_MS
+        finally:
+            self.lalin_diminta.discard(k)
+
+    def segarkan(self):
+        """Hitung ulang rute lokasi terpilih dengan lalu lintas live; hasil lama tetap tampil sampai yang baru selesai."""
+        self.menyegarkan = True
+        lon, lat = self.lokasi[:2]
+        baru = [{**k, "menit": None, "km": None, "garis": None, "galat": None, "info": None, "bagian": None} for k in self.kandidat]
+        threading.Thread(target=self._segarkan, args=(self.gen, baru, lon, lat), daemon=True).start()
+
+    def _segarkan(self, gen, baru, lon, lat):
+        try:
+            for k in baru:
+                if gen != self.gen:
+                    return
+                try:
+                    menit, km, garis, info = rute(k["pos"], lon, lat, None)
+                    k["km"], k["garis"], k["info"], k["menit"] = km, garis, info, menit   # menit terakhir: dianggap selesai kalau terisi
+                except Exception as e:
+                    k["galat"] = str(e)[:60]
+            if gen == self.gen:
+                if any(k["menit"] is not None for k in baru):   # semua gagal (misalnya offline): pertahankan hasil lama
+                    self.kandidat, self.diperbarui = baru, datetime.now(WIB)
+                self.terakhir = pygame.time.get_ticks()
+        finally:
+            self.menyegarkan = False
+
+    def _bagian_macet(self, gen, k, lon, lat):
+        try:
+            bebas = rute(k["pos"], lon, lat, None, bebas=True)[3]["langkah"]
+            bagian = bagian_macet(k["info"]["langkah"], bebas)
+        except Exception:
+            bagian = []   # pembanding gagal: rute diwarnai satu warna menurut perlambatan total
+        if gen == self.gen:
+            k["bagian"] = bagian
+
     # --- logika inti ---
     def pilih(self, lon, lat, label=None):
         """Simulasikan kebakaran di (lon, lat): urutkan pos menurut garis lurus, lalu hitung rute N terdekat."""
         self.gen += 1
+        self.tampil, self.sembunyi = set(), set()
         p = Point(lon, lat)
         kec = next((k["nama"] for k in self.kec if k["geom"].contains(p)), None)
         self.lokasi = (lon, lat, label or "Titik pilihan di peta", kec or "di luar Surabaya")
         urut = sorted(self.pos, key=lambda q: jarak_km(q["lon"], q["lat"], lon, lat))
         # shortcut: pos tercepat diasumsikan ada di antara N_KANDIDAT terdekat garis lurus; naikkan N kalau ragu
         self.kandidat = [{"pos": q, "lurus": jarak_km(q["lon"], q["lat"], lon, lat), "menit": None, "km": None,
-                          "garis": None, "galat": None} for q in urut[:N_KANDIDAT]]
+                          "garis": None, "galat": None, "info": None, "bagian": None} for q in urut[:N_KANDIDAT]]
         if KEY:
             self.pesan = "Menghitung rute..."
             threading.Thread(target=self._hitung_rute, args=(self.gen, self.kandidat, lon, lat, self.jam), daemon=True).start()
@@ -218,11 +303,13 @@ class App:
             if gen != self.gen:
                 return
             try:
-                k["menit"], k["km"], k["garis"] = rute(k["pos"], lon, lat, jam)
+                menit, km, garis, info = rute(k["pos"], lon, lat, jam)
+                k["km"], k["garis"], k["info"], k["menit"] = km, garis, info, menit   # menit terakhir: dianggap selesai kalau terisi
             except Exception as e:
                 k["galat"] = str(e)[:60]
         if gen == self.gen:
             self.pesan = "Selesai"
+            self.diperbarui, self.terakhir = datetime.now(WIB), pygame.time.get_ticks()
 
     def terapkan_jam(self):
         m = re.fullmatch(r"\s*(\d{1,2}):?(\d{2})\s*", self.ketik_jam)
@@ -269,7 +356,14 @@ class App:
         self.jam = jam
         self.ketik_jam, self.galat_jam = ("" if jam is None else jam_teks(jam)), False
         if self.lokasi:
+            tampil, sembunyi = self.tampil, self.sembunyi   # lokasi sama, jadi pilihan rute tetap
             self.pilih(*self.lokasi[:3])
+            self.tampil, self.sembunyi = tampil, sembunyi
+
+    def ganti_tampil(self, nama):
+        """Klik baris perbandingan: tampilkan atau sembunyikan rute pos itu (termasuk pos tercepat)."""
+        cepat = self.tercepat()
+        (self.sembunyi if cepat and cepat["pos"]["nama"] == nama else self.tampil).symmetric_difference_update([nama])
 
     def tercepat(self):
         if any(k["menit"] is None and not k["galat"] for k in self.kandidat):
@@ -289,9 +383,12 @@ class App:
         layar.fill((229, 227, 223))
         s, n = self.skala(), 2 ** self.zoom
         x0, y0 = self.cx * s - self.map_w / 2, self.cy * s - self.h / 2   # piksel dunia di pojok kiri atas
+        live = self.lapisan and self.jam is None and KEY   # kemacetan live tidak punya dimensi waktu, jadi hanya untuk "Sekarang"
         for tx in range(int(x0 // 256), int((x0 + self.map_w) // 256) + 1):
             for ty in range(int(y0 // 256), int((y0 + self.h) // 256) + 1):
                 if 0 <= tx < n and 0 <= ty < n and (img := self.tile(self.zoom, tx, ty)):
+                    layar.blit(img, (tx * 256 - x0, ty * 256 - y0))
+                if live and 0 <= tx < n and 0 <= ty < n and (img := self.tile_lalin(self.zoom, tx, ty, t)):
                     layar.blit(img, (tx * 256 - x0, ty * 256 - y0))
 
         # lapisan transparan: batas kecamatan, kecamatan terpilih, denyut titik api
@@ -312,28 +409,44 @@ class App:
         layar.blit(ov, (0, 0))
 
         cepat = self.tercepat()
-        for k in sorted(self.kandidat, key=lambda k: k is cepat):   # rute tercepat digambar paling atas
-            if k["garis"]:
-                pts = [self.ke_layar(*merc(*p)) for p in k["garis"]]
-                if k is cepat:
-                    pygame.draw.lines(layar, C["kartu"], False, pts, 10)
-                    pygame.draw.lines(layar, C["hijau"], False, pts, 6)
-                else:
-                    pygame.draw.lines(layar, (140, 146, 152), False, pts, 3)
+        if (self.auto and self.jam is None and KEY and self.lokasi and cepat and not self.menyegarkan
+                and t - self.terakhir >= SEGARKAN_MS):
+            self.segarkan()
+        # rute yang digambar: tercepat selalu, pos lain kalau di-toggle; rincian kemacetan dihitung sekali per rute
+        gambar_rute = [k for k in self.kandidat if k["garis"] and (k is cepat and k["pos"]["nama"] not in self.sembunyi or k["pos"]["nama"] in self.tampil)]
+        for k in gambar_rute:
+            if k["bagian"] is None and k["menit"] is not None and k["info"] and KEY and self.lokasi:   # pembanding lengang
+                k["bagian"] = []
+                threading.Thread(target=self._bagian_macet, args=(self.gen, k, *self.lokasi[:2]), daemon=True).start()
+        for k in sorted(gambar_rute, key=lambda k: k is cepat):   # rute tercepat digambar paling atas
+            pts = [self.ke_layar(*merc(*p)) for p in k["garis"]]
+            if k["info"]:
+                total = warna_macet(k["menit"] / max(k["info"]["bebas"], 0.1))   # warna satu rute penuh kalau tanpa rincian
+                segmen = k["bagian"] or [(0, len(pts) - 1, None)]
+            else:
+                total, segmen = C["biru"], [(0, len(pts) - 1, None)]
+            pygame.draw.lines(layar, C["kartu"] if k is cepat else C["biru"], False, pts, 10)
+            for a, b, rasio in segmen:
+                if b > a:   # pygame.draw.lines butuh minimal 2 titik
+                    pygame.draw.lines(layar, warna_macet(rasio) if rasio else total, False, pts[a:b + 1], 6)
 
         nama_kandidat = {k["pos"]["nama"] for k in self.kandidat}
+        kand_tampil = {k["pos"]["nama"]: k for k in gambar_rute if k is not cepat}
         hover = None
         for q in self.pos:
             x, y = self.ke_layar(*merc(q["lon"], q["lat"]))
             utama, kand = bool(cepat) and q is cepat["pos"], q["nama"] in nama_kandidat
-            r = 9 if utama else 7 if kand else 6
+            ditampil = q["nama"] in kand_tampil
+            r = 9 if utama or ditampil else 7 if kand else 6
             lingkar(layar, C["kartu"], (x, y), r + 3)
-            lingkar(layar, C["hijau"] if utama else C["merah"], (x, y), r)
+            lingkar(layar, C["hijau"] if utama else C["biru"] if ditampil else C["merah"], (x, y), r)
             lingkar(layar, C["kartu"], (x, y), max(2, r - 5))
             if mouse[0] < self.map_w and math.hypot(mouse[0] - x, mouse[1] - y) < r + 6:
                 hover = (q, x, y)
             if utama:
                 pil(layar, f"{q['nama']} · {cepat['menit']:.1f} mnt", x + r + 7, y - 11, "tebal", C["kartu"], C["hijau"])
+            elif ditampil:
+                pil(layar, f"{q['nama']} · {kand_tampil[q['nama']]['menit']:.1f} mnt", x + r + 7, y - 11, "tebal", C["kartu"], C["biru"])
             elif kand or self.zoom >= 14:
                 pil(layar, q["nama"], x + r + 7, y - 10)
         if hover and not (hover[0]["nama"] in nama_kandidat or self.zoom >= 14):
@@ -346,12 +459,32 @@ class App:
             lingkar(layar, (255, 235, 59), (fx, fy), 3)
 
         self.gambar_cari(layar, t)
+        # kontrol lalu lintas live (kanan atas peta)
+        tombol = (("Lapisan lalu lintas", "lapisan"), ("Auto-perbarui", "auto"))
+        x = self.map_w - 16 - sum(F["biasa"].size(l)[0] + 22 for l, _ in tombol) - 6 * (len(tombol) - 1)
+        for label, atr in tombol:
+            x = self.chip(layar, label, x, 16, getattr(self, atr), lambda a=atr: setattr(self, a, not getattr(self, a))) + 6
+        if self.lapisan or self.auto:
+            info = ["Perlu API key TomTom"] if not KEY else ["Live hanya untuk 'Sekarang'"] if self.jam is not None else []
+            if KEY and self.jam is None:
+                if self.lapisan:
+                    info.append(f"Lapisan gagal: {self.galat_lalin}" if self.galat_lalin else "Lapisan live")
+                if self.auto and self.diperbarui:
+                    info.append(f"rute {self.diperbarui:%H:%M:%S}")
+            teks = " · ".join(info)
+            pil(layar, teks, self.map_w - 16 - F["kecil"].size(teks)[0] - 14, 52, warna=C["redup"])
         # tombol zoom
         for i, (label, dz) in enumerate((("+", 1), ("-", -1))):
             r = pygame.Rect(self.map_w - 52, self.h - 106 + i * 40, 36, 36)
             kartu(layar, r, (232, 240, 254) if r.collidepoint(mouse) else C["kartu"], 8)
             tulis(layar, label, "judul", C["teks"], r.centerx, r.y + 5, rata="tengah")
             self.klik.append((r, lambda dz=dz: self.zoom_ke(dz, self.map_w / 2, self.h / 2)))
+        if cepat:   # legenda warna rute tercepat
+            x = 8
+            for nama, rasio in (("Lancar", 1), ("Padat", 1.4), ("Macet", 2), ("Sangat macet", 3)):
+                pil(layar, nama, x, self.h - 52, warna=C["kartu"], latar=warna_macet(rasio))
+                x += F["kecil"].size(nama)[0] + 20
+            pil(layar, "perlambatan vs jam 03:00", x, self.h - 52, warna=C["redup"])
         pil(layar, "© OpenStreetMap contributors · rute: TomTom", 8, self.h - 26, warna=C["redup"])
 
         self.gambar_panel(layar, cepat, t)
@@ -492,7 +625,9 @@ class App:
             tulis(layar, cepat["pos"]["nama"], "sedang", C["teks"], x0 + 16, y + 30, lebar - 32)
             w = tulis(layar, f"{cepat['menit']:.1f}", "angka", warna, x0 + 16, y + 52)
             tulis(layar, "menit", "biasa", C["redup"], x0 + 22 + w, y + 78)
-            tulis(layar, f"{cepat['km']:.1f} km lewat jalan", "kecil", C["redup"], x0 + 16, y + 102)
+            tunda = cepat["menit"] - cepat["info"]["bebas"] if cepat["info"] else 0
+            tulis(layar, f"{cepat['km']:.1f} km lewat jalan  ·  " + (f"+{tunda:.1f} mnt akibat macet" if tunda >= 0.5 else "lalu lintas lancar"),
+                  "kecil", C["redup"], x0 + 16, y + 102, lebar - 32)
             teks = f"Memenuhi batas {BATAS_TEMPUH_MENIT} menit" if ok else f"Melewati batas {BATAS_TEMPUH_MENIT} menit"
             lw = F["kecil"].size(teks)[0] + 20
             pygame.draw.rect(layar, (230, 244, 234) if ok else (252, 232, 230), (x0 + lebar - lw - 14, y + 70, lw, 26), border_radius=13)
@@ -513,15 +648,24 @@ class App:
         y += 28
 
         # perbandingan
-        tulis(layar, f"PERBANDINGAN {len(self.kandidat)} POS TERDEKAT", "kecil", C["redup"], x0, y)
+        tulis(layar, f"PERBANDINGAN {len(self.kandidat)} POS TERDEKAT  ·  klik untuk tampilkan rute", "kecil", C["redup"], x0, y, lebar)
         y += 20
         kartu(layar, (x0, y, lebar, len(self.kandidat) * 44 + 10))
         maks = max((k["menit"] or 0 for k in self.kandidat), default=0) or 1
         for i, k in enumerate(sorted(self.kandidat, key=lambda k: (k["menit"] is None, k["menit"] or 0, k["lurus"]))):
             ry = y + 6 + i * 44
             utama = k is cepat
-            lingkar(layar, C["hijau"] if utama else (232, 234, 237), (x0 + 24, ry + 21), 11)
-            tulis(layar, str(i + 1), "kecil", C["kartu"] if utama else C["redup"], x0 + 24, ry + 14, rata="tengah")
+            aktif = k["pos"]["nama"] not in self.sembunyi if utama else k["pos"]["nama"] in self.tampil   # rutenya tampil di peta
+            bisa = k["garis"] is not None   # hanya baris yang rutenya sudah ada bisa diklik
+            r = pygame.Rect(x0 + 4, ry, lebar - 8, 44)
+            if aktif and not utama:
+                pygame.draw.rect(layar, (232, 240, 254), r, border_radius=8)
+            elif bisa and r.collidepoint(pygame.mouse.get_pos()):
+                pygame.draw.rect(layar, (245, 248, 255), r, border_radius=8)
+            if bisa:
+                self.klik.append((r, lambda n=k["pos"]["nama"]: self.ganti_tampil(n)))
+            lingkar(layar, (C["hijau"] if utama else C["biru"]) if aktif else (232, 234, 237), (x0 + 24, ry + 21), 11)
+            tulis(layar, str(i + 1), "kecil", C["kartu"] if aktif else C["redup"], x0 + 24, ry + 14, rata="tengah")
             tulis(layar, k["pos"]["nama"], "tebal" if utama else "biasa", C["teks"], x0 + 44, ry + 4, lebar - 140)
             rute_km = f"  ·  {k['km']:.1f} km rute" if k["km"] is not None else ""
             tulis(layar, f"{k['lurus']:.2f} km lurus{rute_km}", "kecil", C["redup"], x0 + 44, ry + 23)
