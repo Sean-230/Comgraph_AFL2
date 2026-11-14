@@ -3,10 +3,10 @@
 Pilih lokasi kebakaran (klik peta, atau ketik nama tempat / "lat, lon" lalu Enter). Aplikasi mencari pos Damkar
 yang paling dekat (garis lurus) dan paling cepat tiba (rute TomTom dengan lalu lintas), seperti bagian 6 notebook.
 
-Kontrol: geser = drag, zoom = scroll atau tombol +/-, panah atas/bawah = ganti jam berangkat, Esc = hapus pencarian.
+Kontrol: geser = drag, zoom = scroll atau tombol +/-, panah atas/bawah = ganti jam berangkat (atau klik kotak jam dan ketik HH:MM 24 jam, lalu Enter), Esc = hapus pencarian.
 """
 import csv, json, math, os, re, threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -62,11 +62,16 @@ def muat_kecamatan():
 
 
 # ---------- TomTom ----------
-def berangkat(jam):
-    """Kemunculan berikutnya dari jam tsb (WIB) -> TomTom memakai pola lalu lintas historis jam itu."""
-    now = datetime.now(WIB)
-    t = now.replace(hour=jam, minute=0, second=0, microsecond=0)
-    return (t if t > now else t + timedelta(days=1)).isoformat()
+HARI = ("Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu")
+
+
+def jam_teks(menit):
+    return f"{menit // 60:02d}:{menit % 60:02d}"
+
+
+def berangkat(menit):
+    """Jam tsb (menit sejak 00:00, WIB) pada tanggal hari ini -> TomTom memakai pola lalu lintas historis hari dan jam itu."""
+    return datetime.now(WIB).replace(hour=menit // 60, minute=menit % 60, second=0, microsecond=0).isoformat()
 
 
 def rute(pos, lon, lat, jam):
@@ -151,7 +156,8 @@ class App:
         self.hasil = []                     # hasil pencarian yang bisa diklik: [(lon, lat, label)]
         self.lokasi = None                  # (lon, lat, label, kecamatan)
         self.kandidat = []                  # pos terdekat + hasil rute
-        self.jam = None                     # None = sekarang
+        self.jam = None                     # None = sekarang; selain itu menit sejak 00:00 (0-1439)
+        self.ketik_jam, self.fokus_jam, self.galat_jam = "", False, False   # kotak ketik jam HH:MM
         self.gen = 0                        # nomor pilihan; hasil thread lama diabaikan
         self.klik, self.kotak_cari, self._ov = [], None, None
         self.tekan, self.geser = None, 0
@@ -218,6 +224,14 @@ class App:
         if gen == self.gen:
             self.pesan = "Selesai"
 
+    def terapkan_jam(self):
+        m = re.fullmatch(r"\s*(\d{1,2}):?(\d{2})\s*", self.ketik_jam)
+        if not m or int(m[1]) > 23 or int(m[2]) > 59:
+            self.galat_jam = True
+            return
+        self.fokus_jam = False
+        self.ganti_jam(int(m[1]) * 60 + int(m[2]))
+
     def cari(self):
         teks = self.teks.strip()
         if not teks:
@@ -253,6 +267,7 @@ class App:
         if jam == self.jam:
             return
         self.jam = jam
+        self.ketik_jam, self.galat_jam = ("" if jam is None else jam_teks(jam)), False
         if self.lokasi:
             self.pilih(*self.lokasi[:3])
 
@@ -412,14 +427,32 @@ class App:
         tulis(layar, "WAKTU BERANGKAT", "kecil", C["redup"], x0, y)
         y += 20
         x = x0
-        for label, jam in (("Sekarang", None), ("07:00", 7), ("14:00", 14), ("17:00", 17), ("22:00", 22)):
+        for label, jam in [("Sekarang", None)] + [(f"{h:02d}:00", h * 60) for h in (7, 14, 17, 22)]:
             x = self.chip(layar, label, x, y, self.jam == jam, lambda j=jam: self.ganti_jam(j)) + 6
         y += 38
-        dasar = datetime.now(WIB).hour if self.jam is None else self.jam
-        x = self.chip(layar, "- 1 jam", x0, y, False, lambda: self.ganti_jam((dasar - 1) % 24)) + 6
-        x = self.chip(layar, "+ 1 jam", x, y, False, lambda: self.ganti_jam((dasar + 1) % 24)) + 12
-        tulis(layar, "Lalu lintas saat ini" if self.jam is None else f"Pola historis pukul {self.jam:02d}:00",
+        dasar = datetime.now(WIB).hour * 60 if self.jam is None else self.jam
+        x = self.chip(layar, "- 1 jam", x0, y, False, lambda: self.ganti_jam((dasar - 60) % 1440)) + 6
+        x = self.chip(layar, "+ 1 jam", x, y, False, lambda: self.ganti_jam((dasar + 60) % 1440)) + 12
+        hari = HARI[datetime.now(WIB).weekday()]
+        tulis(layar, "Lalu lintas saat ini" if self.jam is None else f"Pola historis {hari} {jam_teks(self.jam)}",
               "tebal", C["biru"], x, y + 6, x0 + lebar - x)
+        y += 38
+
+        # kotak ketik jam (24 jam, HH:MM)
+        tulis(layar, "Ketik jam (24 jam):", "biasa", C["teks"], x0, y + 6)
+        kotak = pygame.Rect(x0 + 140, y, 80, 30)
+        pygame.draw.rect(layar, C["kartu"], kotak, border_radius=8)
+        garis = C["merah"] if self.galat_jam else C["biru"] if self.fokus_jam else C["garis"]
+        pygame.draw.rect(layar, garis, kotak, 2 if self.fokus_jam or self.galat_jam else 1, border_radius=8)
+        if self.ketik_jam or self.fokus_jam:
+            w = tulis(layar, self.ketik_jam, "biasa", C["teks"], kotak.x + 10, kotak.y + 6)
+            if self.fokus_jam and t % 1000 < 550:   # kursor berkedip
+                pygame.draw.line(layar, C["teks"], (kotak.x + 12 + w, kotak.y + 6), (kotak.x + 12 + w, kotak.y + 23), 1)
+        else:
+            tulis(layar, "HH:MM", "biasa", (150, 154, 160), kotak.x + 10, kotak.y + 6)
+        self.klik.append((kotak, lambda: setattr(self, "fokus_jam", True)))
+        tulis(layar, "Format salah, contoh 06:30" if self.galat_jam else "Enter = terapkan", "kecil",
+              C["merah"] if self.galat_jam else C["redup"], kotak.right + 10, y + 9)
         y += 46
 
         if not self.lokasi:   # keadaan awal: petunjuk
@@ -522,19 +555,25 @@ class App:
             self.cx, self.cy = mx - (x - self.map_w / 2) / self.skala(), my - (y - self.h / 2) / self.skala()
 
     def event(self, e):
-        if e.type == pygame.TEXTINPUT:
+        if e.type == pygame.TEXTINPUT and self.fokus_jam:
+            self.ketik_jam = (self.ketik_jam + "".join(c for c in e.text if c.isdigit() or c == ":"))[:5]
+            self.galat_jam = False
+        elif e.type == pygame.TEXTINPUT:
             self.teks += e.text
             self.hasil = []
         elif e.type == pygame.KEYDOWN:
-            if e.key == pygame.K_BACKSPACE:
+            if e.key == pygame.K_BACKSPACE and self.fokus_jam:
+                self.ketik_jam, self.galat_jam = self.ketik_jam[:-1], False
+            elif e.key == pygame.K_BACKSPACE:
                 self.teks = self.teks[:-1]
             elif e.key == pygame.K_ESCAPE:
+                self.fokus_jam = False
                 self.hapus_cari()
             elif e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-                self.cari()
+                self.terapkan_jam() if self.fokus_jam else self.cari()
             elif e.key in (pygame.K_UP, pygame.K_DOWN):
-                d = 1 if e.key == pygame.K_UP else -1
-                self.ganti_jam(((datetime.now(WIB).hour if self.jam is None else self.jam) + d) % 24)
+                d = 60 if e.key == pygame.K_UP else -60
+                self.ganti_jam(((datetime.now(WIB).hour * 60 if self.jam is None else self.jam) + d) % 1440)
         elif e.type == pygame.MOUSEWHEEL:
             x, y = pygame.mouse.get_pos()
             if x < self.map_w:
@@ -548,6 +587,7 @@ class App:
             self.cy -= e.rel[1] / self.skala()
         elif e.type == pygame.MOUSEBUTTONUP and e.button == 1 and self.tekan:
             tekan, self.tekan = self.tekan, None
+            self.fokus_jam = False   # klik di luar kotak jam melepas fokus; kotak jam menyalakannya lagi lewat fn
             fn = next((fn for r, fn in reversed(self.klik) if r.collidepoint(e.pos)), None)
             if fn:
                 fn()
