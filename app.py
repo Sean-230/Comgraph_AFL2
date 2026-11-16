@@ -25,6 +25,7 @@ PANEL_W = 400
 SEGARKAN_MS = 120_000                      # selang pembaruan lalu lintas live (lapisan peta dan auto-perbarui rute)
 UA = {"User-Agent": "gis-coursework-pygame"}
 PUSAT = (112.72, -7.28)                     # lon, lat tengah Surabaya
+GALAT_LUAR = ("Titik di luar wilayah Surabaya.", "Tidak ada pos Damkar yang dapat menjangkaunya.")
 
 KEY_FILE = Path(".tomtom_key")
 KEY = os.environ.get("TOMTOM_API_KEY") or (KEY_FILE.read_text().strip() if KEY_FILE.exists() else None)
@@ -178,6 +179,7 @@ class App:
         self.teks, self.pesan = "", "Klik peta atau ketik lokasi kebakaran, lalu Enter"
         self.hasil = []                     # hasil pencarian yang bisa diklik: [(lon, lat, label)]
         self.lokasi = None                  # (lon, lat, label, kecamatan)
+        self.galat_lokasi = False           # True: titik terakhir dipilih di luar Surabaya (ditolak)
         self.kandidat = []                  # pos terdekat + hasil rute
         self.tampil = set()                 # nama pos (selain yang tercepat) yang rutenya ditampilkan
         self.sembunyi = set()               # nama pos tercepat yang rutenya disembunyikan (tercepat tampil secara default)
@@ -282,12 +284,17 @@ class App:
 
     # --- logika inti ---
     def pilih(self, lon, lat, label=None):
-        """Simulasikan kebakaran di (lon, lat): urutkan pos menurut garis lurus, lalu hitung rute N terdekat."""
-        self.gen += 1
+        """Simulasikan kebakaran di (lon, lat): urutkan pos menurut garis lurus, lalu hitung rute N terdekat.
+        -> False kalau titik di luar Surabaya (ditolak: tidak ada pos yang menjangkau)."""
+        self.gen += 1   # membatalkan hitungan rute sebelumnya
         self.tampil, self.sembunyi = set(), set()
         p = Point(lon, lat)
         kec = next((k["nama"] for k in self.kec if k["geom"].contains(p)), None)
-        self.lokasi = (lon, lat, label or "Titik pilihan di peta", kec or "di luar Surabaya")
+        self.galat_lokasi = kec is None
+        if self.galat_lokasi:
+            self.lokasi, self.kandidat, self.pesan = None, [], ""
+            return False
+        self.lokasi = (lon, lat, label or "Titik pilihan di peta", kec)
         urut = sorted(self.pos, key=lambda q: jarak_km(q["lon"], q["lat"], lon, lat))
         # shortcut: pos tercepat diasumsikan ada di antara N_KANDIDAT terdekat garis lurus; naikkan N kalau ragu
         self.kandidat = [{"pos": q, "lurus": jarak_km(q["lon"], q["lat"], lon, lat), "menit": None, "km": None,
@@ -297,6 +304,7 @@ class App:
             threading.Thread(target=self._hitung_rute, args=(self.gen, self.kandidat, lon, lat, self.jam), daemon=True).start()
         else:
             self.pesan = "Tanpa API key TomTom: hanya jarak garis lurus"
+        return True
 
     def _hitung_rute(self, gen, kandidat, lon, lat, jam):
         for k in kandidat:
@@ -346,9 +354,9 @@ class App:
 
     def lompat(self, lon, lat, label=None):
         self.hasil = []
-        self.cx, self.cy = merc(lon, lat)
-        self.zoom = max(self.zoom, 14)
-        self.pilih(lon, lat, label)
+        if self.pilih(lon, lat, label):   # peta hanya pindah kalau titik valid (koordinat ngawur tidak merusak tampilan)
+            self.cx, self.cy = merc(lon, lat)
+            self.zoom = max(self.zoom, 14)
 
     def ganti_jam(self, jam):
         if jam == self.jam:
@@ -536,6 +544,8 @@ class App:
                 self.klik.append((r, lambda h=h, nama=nama: (setattr(self, "teks", nama), self.lompat(*h))))
         elif self.pesan.startswith(("Pencarian", '"')):   # galat / tidak ditemukan
             pil(layar, self.pesan, kotak.x + 8, y, warna=C["kartu"], latar=C["merah"])
+        elif self.galat_lokasi:
+            pil(layar, " ".join(GALAT_LUAR), kotak.x + 8, y, warna=C["kartu"], latar=C["merah"])
 
     def chip(self, layar, label, x, y, aktif, fn):
         r = pygame.Rect(x, y, F["biasa"].size(label)[0] + 22, 30)
@@ -589,7 +599,7 @@ class App:
         y += 46
 
         if not self.lokasi:   # keadaan awal: petunjuk
-            kartu(layar, (x0, y, lebar, 150))
+            kartu(layar, (x0, y, lebar, 150 + 54 * self.galat_lokasi))
             lingkar(layar, (253, 237, 232), (x0 + 36, y + 38), 20)
             lingkar(layar, C["merah"], (x0 + 36, y + 38), 9)
             lingkar(layar, C["jingga"], (x0 + 36, y + 38), 5)
@@ -599,6 +609,9 @@ class App:
                                        "2.  Ketik nama tempat di kotak pencarian",
                                        "     (atau koordinat \"lat, lon\"), lalu Enter")):
                 tulis(layar, baris, "biasa", C["teks"], x0 + 18, y + 74 + i * 21)
+            if self.galat_lokasi:
+                for i, baris in enumerate(GALAT_LUAR):
+                    tulis(layar, baris, "tebal" if i == 0 else "kecil", C["merah"], x0 + 18, y + 150 + i * 20, lebar - 36)
         else:
             self.gambar_hasil(layar, cepat, t, x0, y, lebar)
         if self.h > 700:
@@ -686,7 +699,7 @@ class App:
 
     # --- event ---
     def hapus_cari(self):
-        self.teks, self.hasil = "", []
+        self.teks, self.hasil, self.galat_lokasi = "", [], False
         if self.pesan.startswith(("Pencarian", '"')):
             self.pesan = ""
 
